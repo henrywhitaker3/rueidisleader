@@ -101,17 +101,23 @@ func New(opts *LeaderOpts) (*Leader, error) {
 }
 
 func (c *Leader) Run(ctx context.Context) {
+	// A timer that is used by followers to attempt election
 	tick := time.NewTicker(c.renewBefore)
 	defer tick.Stop()
 
+	// A fallback check that leader's run to make sure
+	// the leader in redis matches our state
 	fallback := time.NewTicker(time.Second)
 	defer fallback.Stop()
 
+	// Channel that controls all attempts for election
 	attempt := make(chan struct{}, 1)
 	attempt <- struct{}{}
 
+	// A channel that receives when a peer sends an evicted event
 	watchEvicted := c.subscribeEvicted(ctx)
 
+	// Release our lock when we stop
 	defer c.evicted(context.Background())
 
 	for {
@@ -156,6 +162,10 @@ func (c *Leader) Run(ctx context.Context) {
 			c.elected(ctx)
 		}
 	}
+}
+
+func (c *Leader) Close() {
+	close(c.isClosed)
 }
 
 func (c *Leader) elected(ctx context.Context) {
