@@ -1,6 +1,10 @@
 package rueidisleader
 
-import "go.uber.org/zap"
+import (
+	"log/slog"
+
+	"go.uber.org/zap"
+)
 
 type Logger interface {
 	Info(msg string, args ...any)
@@ -35,3 +39,5 @@ func (z *zapSugaredWrapper) Error(msg string, args ...any) {
 func (z *zapSugaredWrapper) Debug(msg string, args ...any) {
 	z.zap.Debugw(msg, args...)
 }
+
+var _ Logger = &slog.Logger{}

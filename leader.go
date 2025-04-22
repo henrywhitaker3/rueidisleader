@@ -193,9 +193,11 @@ func (c *Leader) queueRenewals(ctx context.Context, inteval time.Duration) {
 }
 
 func (c *Leader) evicted(ctx context.Context) {
+	if c.IsLeader() {
+		c.notifyEvicted(ctx)
+	}
 	c.isLeader.Store(false)
 	c.release(ctx)
-	c.notifyEvicted(ctx)
 }
 
 func (c *Leader) check(ctx context.Context) error {
