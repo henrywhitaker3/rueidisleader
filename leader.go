@@ -102,7 +102,7 @@ func New(opts *LeaderOpts) (*Leader, error) {
 
 func (c *Leader) Run(ctx context.Context) {
 	// A timer that is used by followers to attempt election
-	tick := time.NewTicker(c.renewBefore)
+	tick := time.NewTicker(c.obtainInterval)
 	defer tick.Stop()
 
 	// A fallback check that leader's run to make sure
