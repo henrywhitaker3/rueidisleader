@@ -47,9 +47,13 @@ type LeaderOpts struct {
 	Logger Logger
 }
 
+const (
+	minValidity = time.Second * 10
+)
+
 func (l LeaderOpts) validate() error {
-	if l.Validity < time.Second*10 {
-		return fmt.Errorf("validity must be >= 10 seconds")
+	if l.Validity < minValidity {
+		return fmt.Errorf("validity must be >= %s", minValidity.String())
 	}
 	if l.RenewBefore >= l.Validity {
 		return fmt.Errorf("RenewBefore must be smaller than validity")
@@ -136,8 +140,9 @@ func (c *Leader) Run(ctx context.Context) {
 				continue
 			}
 			if err := c.check(ctx); err != nil {
-				c.logger.Error("our lease and redis do not match!")
+				c.logger.Error("redis think someone else is the leader, correcting our state")
 				c.evicted(ctx)
+				continue
 			}
 		case <-watchEvicted:
 			c.logger.Info("observed lease eviction")
