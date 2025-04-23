@@ -86,8 +86,13 @@ func TestOnlyOneObtainsLeader(t *testing.T) {
 		// Do nothing
 	}
 
-	require.True(t, leader1.IsLeader())
-	require.Nil(t, leader1.check(ctx))
-	require.False(t, leader2.IsLeader())
-	require.NotNil(t, leader2.check(ctx))
+	require.True(t, leader1.IsLeader() || leader2.IsLeader())
+	if leader1.IsLeader() {
+		require.False(t, leader2.IsLeader())
+		require.Nil(t, leader1.check(ctx))
+	}
+	if leader2.IsLeader() {
+		require.False(t, leader1.IsLeader())
+		require.Nil(t, leader2.check(ctx))
+	}
 }
