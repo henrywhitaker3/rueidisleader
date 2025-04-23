@@ -235,16 +235,6 @@ func (c *Leader) renew(ctx context.Context) error {
 }
 
 func (c *Leader) obtain(ctx context.Context) error {
-	c.logger.Debug(
-		"executing obtain script",
-		"topic",
-		c.topic,
-		"instance",
-		c.instance.String(),
-		"validity",
-		c.validity.String(),
-	)
-
 	res := obtain.Exec(
 		ctx,
 		c.client,
