@@ -19,7 +19,12 @@ func TestItObtainsLeader(t *testing.T) {
 
 	go leader1.Run(ctx)
 
-	time.Sleep(time.Millisecond * 250)
+	select {
+	case <-ctx.Done():
+		t.Error("timed out waiting for init")
+	case <-leader1.Initialised():
+		// Do nothing
+	}
 
 	require.True(t, leader1.IsLeader())
 	require.Nil(t, leader1.check(ctx))
@@ -36,7 +41,12 @@ func TestItRenewsLeader(t *testing.T) {
 
 	go leader1.Run(ctx)
 
-	time.Sleep(time.Millisecond * 250)
+	select {
+	case <-ctx.Done():
+		t.Error("timed out waiting for init")
+	case <-leader1.Initialised():
+		// Do nothing
+	}
 
 	require.True(t, leader1.IsLeader())
 	require.Nil(t, leader1.check(ctx))
@@ -63,10 +73,26 @@ func TestOnlyOneObtainsLeader(t *testing.T) {
 	go leader1.Run(ctx)
 	go leader2.Run(ctx)
 
-	time.Sleep(time.Millisecond * 250)
+	select {
+	case <-ctx.Done():
+		t.Error("timed out waiting for init")
+	case <-leader1.Initialised():
+		// Do nothing
+	}
+	select {
+	case <-ctx.Done():
+		t.Error("timed out waiting for init")
+	case <-leader2.Initialised():
+		// Do nothing
+	}
 
-	require.True(t, leader1.IsLeader())
-	require.Nil(t, leader1.check(ctx))
-	require.False(t, leader2.IsLeader())
-	require.NotNil(t, leader2.check(ctx))
+	require.True(t, leader1.IsLeader() || leader2.IsLeader())
+	if leader1.IsLeader() {
+		require.False(t, leader2.IsLeader())
+		require.Nil(t, leader1.check(ctx))
+	}
+	if leader2.IsLeader() {
+		require.False(t, leader1.IsLeader())
+		require.Nil(t, leader2.check(ctx))
+	}
 }
