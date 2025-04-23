@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,10 +13,12 @@ import (
 )
 
 type Leader struct {
-	client   rueidis.Client
-	topic    string
-	isLeader *atomic.Bool
-	isClosed chan struct{}
+	client         rueidis.Client
+	topic          string
+	isLeader       *atomic.Bool
+	isClosed       chan struct{}
+	hasInitialised chan struct{}
+	initCloser     *sync.Once
 
 	instance uuid.UUID
 
@@ -96,6 +99,8 @@ func New(opts *LeaderOpts) (*Leader, error) {
 		instance:       instance,
 		isLeader:       &atomic.Bool{},
 		isClosed:       make(chan struct{}, 1),
+		hasInitialised: make(chan struct{}, 1),
+		initCloser:     &sync.Once{},
 		validity:       opts.Validity,
 		renewBefore:    opts.RenewBefore,
 		obtainInterval: opts.ObtainInterval,
@@ -150,23 +155,30 @@ func (c *Leader) Run(ctx context.Context) {
 		case <-tick.C:
 			attempt <- struct{}{}
 		case <-attempt:
-			if c.IsLeader() {
-				c.logger.Info("i am the leader")
-				continue
-			}
-			if err := c.obtain(ctx); err != nil {
-				if errors.Is(err, rueidis.Nil) {
-					// This means we didn't get the lock
-					c.logger.Debug("not the leader")
-					continue
-				}
-				c.logger.Error("failed to obtain lease", "error", err)
-				continue
-			}
-			c.logger.Info("elected leader")
-			c.elected(ctx)
+			c.attempt(ctx)
 		}
 	}
+}
+
+func (c *Leader) attempt(ctx context.Context) {
+	defer c.initCloser.Do(func() { close(c.hasInitialised) })
+
+	if c.IsLeader() {
+		c.logger.Info("i am the leader")
+		return
+	}
+	err := c.obtain(ctx)
+	if err != nil {
+		if errors.Is(err, rueidis.Nil) {
+			// This means we didn't get the lock
+			c.logger.Debug("not the leader")
+			return
+		}
+		c.logger.Error("failed to obtain lease", "error", err)
+		return
+	}
+	c.logger.Info("elected leader")
+	c.elected(ctx)
 }
 
 func (c *Leader) Close() {
@@ -249,4 +261,8 @@ func (c *Leader) obtain(ctx context.Context) error {
 
 func (c *Leader) IsLeader() bool {
 	return c.isLeader.Load()
+}
+
+func (c *Leader) Initialised() <-chan struct{} {
+	return c.hasInitialised
 }
