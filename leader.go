@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/rueidis"
 )
 
@@ -28,7 +29,8 @@ type Leader struct {
 
 	renewCh chan struct{}
 
-	logger Logger
+	logger  Logger
+	metrics *metrics
 }
 
 type LeaderOpts struct {
@@ -48,6 +50,8 @@ type LeaderOpts struct {
 
 	// A logger used to log actions, when not set, nothing will be logged
 	Logger Logger
+
+	Metrics MetricsOpts
 }
 
 const (
@@ -106,6 +110,7 @@ func New(opts *LeaderOpts) (*Leader, error) {
 		obtainInterval: opts.ObtainInterval,
 		renewCh:        make(chan struct{}, 1),
 		logger:         opts.Logger,
+		metrics:        newMetrics(opts.Metrics),
 	}, nil
 }
 
@@ -128,6 +133,7 @@ func (c *Leader) Run(ctx context.Context) {
 
 	// Release our lock when we stop
 	defer c.evicted(context.Background())
+	defer c.logger.Info("stopping leader election")
 
 	for {
 		select {
@@ -160,7 +166,12 @@ func (c *Leader) Run(ctx context.Context) {
 	}
 }
 
+func (c *Leader) RegisterMetrics(reg prometheus.Registerer) {
+	c.metrics.register(reg)
+}
+
 func (c *Leader) attempt(ctx context.Context) {
+	c.metrics.attempts.Inc()
 	defer c.initCloser.Do(func() { close(c.hasInitialised) })
 
 	if c.IsLeader() {
@@ -188,6 +199,7 @@ func (c *Leader) Close() {
 func (c *Leader) elected(ctx context.Context) {
 	c.isLeader.Store(true)
 	go c.queueRenewals(ctx, c.validity-c.renewBefore)
+	c.metrics.isLeader.Set(1)
 }
 
 func (c *Leader) queueRenewals(ctx context.Context, inteval time.Duration) {
@@ -215,6 +227,7 @@ func (c *Leader) evicted(ctx context.Context) {
 	}
 	c.isLeader.Store(false)
 	c.release(ctx)
+	c.metrics.isLeader.Set(0)
 }
 
 func (c *Leader) check(ctx context.Context) error {
@@ -234,6 +247,7 @@ func (c *Leader) release(ctx context.Context) error {
 }
 
 func (c *Leader) renew(ctx context.Context) error {
+	c.metrics.renewals.Inc()
 	res := renew.Exec(
 		ctx,
 		c.client,
