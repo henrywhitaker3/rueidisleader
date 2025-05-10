@@ -25,6 +25,7 @@ type Leader struct {
 	validity       time.Duration
 	renewBefore    time.Duration
 	obtainInterval time.Duration
+	queryTimeout   time.Duration
 
 	renewCh chan struct{}
 
@@ -46,6 +47,9 @@ type LeaderOpts struct {
 
 	// The interval that followers will attempt to obtain the lease
 	ObtainInterval time.Duration
+
+	// The timeout for each query to the redis instance (default: 1s)
+	QueryTimeout time.Duration
 
 	// A logger used to log actions, when not set, nothing will be logged
 	Logger Logger
@@ -80,6 +84,9 @@ func (l *LeaderOpts) setDefaults() {
 	if l.ObtainInterval == 0 {
 		l.ObtainInterval = time.Second * 5
 	}
+	if l.QueryTimeout == 0 {
+		l.QueryTimeout = time.Second
+	}
 	if l.Logger == nil {
 		l.Logger = nilLogger{}
 	}
@@ -107,6 +114,7 @@ func New(opts *LeaderOpts) (*Leader, error) {
 		validity:       opts.Validity,
 		renewBefore:    opts.RenewBefore,
 		obtainInterval: opts.ObtainInterval,
+		queryTimeout:   opts.QueryTimeout,
 		renewCh:        make(chan struct{}, 1),
 		logger:         opts.Logger,
 		metrics:        opts.Metrics,
@@ -175,6 +183,7 @@ func (c *Leader) attempt(ctx context.Context) {
 		c.logger.Info("i am the leader")
 		return
 	}
+
 	err := c.obtain(ctx)
 	if err != nil {
 		if errors.Is(err, rueidis.Nil) {
@@ -224,6 +233,7 @@ func (c *Leader) evicted(ctx context.Context) {
 	if c.IsLeader() {
 		c.notifyEvicted(ctx)
 	}
+
 	c.isLeader.Store(false)
 	c.release(ctx)
 	if c.metrics.IsLeader != nil {
@@ -232,6 +242,9 @@ func (c *Leader) evicted(ctx context.Context) {
 }
 
 func (c *Leader) check(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.queryTimeout)
+	defer cancel()
+
 	res := check.Exec(ctx, c.client, []string{c.topic}, []string{c.instance.String()})
 	if err := res.Error(); err != nil {
 		return fmt.Errorf("not the leader: %w", err)
@@ -240,6 +253,9 @@ func (c *Leader) check(ctx context.Context) error {
 }
 
 func (c *Leader) release(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.queryTimeout)
+	defer cancel()
+
 	res := release.Exec(ctx, c.client, []string{c.topic}, []string{c.instance.String()})
 	if err := res.Error(); err != nil {
 		return fmt.Errorf("delete lock: %w", err)
@@ -248,6 +264,9 @@ func (c *Leader) release(ctx context.Context) error {
 }
 
 func (c *Leader) renew(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.queryTimeout)
+	defer cancel()
+
 	if c.metrics.Renewals != nil {
 		c.metrics.Renewals.Inc()
 	}
@@ -264,6 +283,9 @@ func (c *Leader) renew(ctx context.Context) error {
 }
 
 func (c *Leader) obtain(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.queryTimeout)
+	defer cancel()
+
 	res := obtain.Exec(
 		ctx,
 		c.client,
