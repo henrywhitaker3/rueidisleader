@@ -3,7 +3,7 @@ module github.com/henrywhitaker3/rueidisleader
 go 1.24.2
 
 require (
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/redis/rueidis v1.0.59
