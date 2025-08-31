@@ -6,7 +6,7 @@ require (
 	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.0
-	github.com/redis/rueidis v1.0.59
+	github.com/redis/rueidis v1.0.64
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.37.0
 	go.uber.org/zap v1.27.0
